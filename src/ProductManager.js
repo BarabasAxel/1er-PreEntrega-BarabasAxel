@@ -45,8 +45,12 @@ class ProductManager {
     this.saveProducts();
   }
 
-  getProducts() {
-    return this.products;
+  getProducts(limit) {
+    if (limit === undefined) {
+      return this.products;
+    } else {
+      return this.products.slice(0, limit);
+    }
   }
 
   getProductById(id) {
@@ -57,7 +61,6 @@ class ProductManager {
     return product;
   }
 
-  // El updatedFields es un objeto que tiene los campos que deben actualizarse y sus nuevos valores.
   updateProduct(id, updatedFields) {
     const productIndex = this.products.findIndex(p => p.id === id);
     if (productIndex !== -1) {
@@ -75,33 +78,4 @@ class ProductManager {
   }
 }
 
-// Crear una instancia de ProductManager con la ruta del archivo
-const productManager = new ProductManager('productos.json');
-
-// Ejemplo
-productManager.addProduct({
-  title: "Producto 1",
-  description: "Descripción del producto 1",
-  price: 10,
-  thumbnail: "url_1",
-  code: "ABC123",
-  stock: 50,
-});
-
-productManager.addProduct({
-  title: "Producto 2",
-  description: "Descripción del producto 2",
-  price: 19,
-  thumbnail: "url_2",
-  code: "XYZ456",
-  stock: 30,
-});
-
-console.log(productManager.getProducts());
-console.log(productManager.getProductById(1));
-
-productManager.updateProduct(1, { price: 12, stock: 60 });
-console.log(productManager.getProducts());
-
-productManager.deleteProduct(2);
-console.log(productManager.getProducts());
+module.exports = ProductManager;
