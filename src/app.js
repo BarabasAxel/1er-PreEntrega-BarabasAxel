@@ -1,42 +1,183 @@
 const express = require('express');
+const fs = require('fs');
+
 const app = express();
-const port = 3000;
+const port = 8080;
 
-//Importo ProductManager
-const ProductManager = require('./ProductManager');
+// Middleware para parsear JSON en las solicitudes
+app.use(express.json());
 
-// Instancio ProductManager
-const productManager = new ProductManager('productos.json');
+// Ruta raíz para productos
+const productsRouter = express.Router();
+app.use('/api/products', productsRouter);
 
-// Endpoint para obtener todos los productos con opción de límite
-app.get('/products', async (req, res) => {
+// Ruta raíz para carritos
+const cartsRouter = express.Router();
+app.use('/api/carts', cartsRouter);
+
+// Función para cargar datos desde un archivo JSON
+function loadJSONFile(filePath) {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit) : undefined;
-    const products = await productManager.getProducts(limit);
+    const data = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
+}
+
+// Función para guardar datos en un archivo JSON
+function saveJSONFile(filePath, data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Ruta raíz GET para obtener todos los productos
+productsRouter.get('/', (req, res) => {
+  const { limit } = req.query;
+  const products = loadJSONFile('products.json');
+  if (limit) {
+    res.json({ products: products.slice(0, parseInt(limit)) });
+  } else {
     res.json({ products });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Error al obtener productos' });
   }
 });
 
-// Endpoint para obtener un producto por ID
-app.get('/products/:pid', async (req, res) => {
-  try {
-    const productId = parseInt(req.params.pid);
-    const product = await productManager.getProductById(productId);
-    if (product) {
-      res.json({ product });
+// Ruta GET para obtener un producto por ID
+productsRouter.get('/:pid', (req, res) => {
+  const { pid } = req.params;
+  const products = loadJSONFile('products.json');
+  const product = products.find((p) => p.id === pid);
+  if (product) {
+    res.json({ product });
+  } else {
+    res.status(404).json({ error: 'Producto no encontrado' });
+  }
+});
+
+// Ruta raíz POST para agregar un nuevo producto
+productsRouter.post('/', (req, res) => {
+  const newProduct = req.body;
+  const products = loadJSONFile('products.json');
+
+  // Validar que todos los campos obligatorios estén presentes
+  if (
+    !newProduct.title ||
+    !newProduct.description ||
+    !newProduct.code ||
+    !newProduct.price ||
+    !newProduct.stock ||
+    !newProduct.category ||
+    !newProduct.thumbnails
+  ) {
+    res.status(400).json({ error: 'Todos los campos son obligatorios excepto thumbnails' });
+    return;
+  }
+
+  // Generar un nuevo ID y agregar el producto
+  const newId = Date.now().toString(); // Generar un ID único
+  const productToAdd = {
+    id: newId,
+    ...newProduct,
+    status: true, // Valor por defecto
+  };
+  products.push(productToAdd);
+  saveJSONFile('products.json', products);
+
+  res.status(201).json({ message: 'Producto agregado', product: productToAdd });
+});
+
+// Ruta PUT para actualizar un producto por ID
+productsRouter.put('/:pid', (req, res) => {
+  const { pid } = req.params;
+  const updatedProduct = req.body;
+  const products = loadJSONFile('products.json');
+  const productIndex = products.findIndex((p) => p.id === pid);
+
+  if (productIndex !== -1) {
+    // Mantener el ID original
+    updatedProduct.id = pid;
+
+    // Actualizar el producto
+    products[productIndex] = updatedProduct;
+    saveJSONFile('products.json', products);
+
+    res.json({ message: 'Producto actualizado', product: updatedProduct });
+  } else {
+    res.status(404).json({ error: 'Producto no encontrado' });
+  }
+});
+
+// Ruta DELETE para eliminar un producto por ID
+productsRouter.delete('/:pid', (req, res) => {
+  const { pid } = req.params;
+  const products = loadJSONFile('products.json');
+  const updatedProducts = products.filter((p) => p.id !== pid);
+
+  if (updatedProducts.length < products.length) {
+    saveJSONFile('products.json', updatedProducts);
+    res.json({ message: 'Producto eliminado' });
+  } else {
+    res.status(404).json({ error: 'Producto no encontrado' });
+  }
+});
+
+// Ruta POST para crear un nuevo carrito
+cartsRouter.post('/', (req, res) => {
+  const newCart = req.body;
+  const carts = loadJSONFile('carts.json');
+
+  // Generar un nuevo ID para el carrito
+  const newId = Date.now().toString(); // Generar un ID único
+  const cartToAdd = {
+    id: newId,
+    products: [],
+    ...newCart,
+  };
+  carts.push(cartToAdd);
+  saveJSONFile('carts.json', carts);
+
+  res.status(201).json({ message: 'Carrito creado', cart: cartToAdd });
+});
+
+// Ruta GET para obtener los productos de un carrito por su ID
+cartsRouter.get('/:cid', (req, res) => {
+  const { cid } = req.params;
+  const carts = loadJSONFile('carts.json');
+  const cart = carts.find((c) => c.id === cid);
+
+  if (cart) {
+    res.json({ products: cart.products });
+  } else {
+    res.status(404).json({ error: 'Carrito no encontrado' });
+  }
+});
+
+// Ruta POST para agregar un producto a un carrito
+cartsRouter.post('/:cid/product/:pid', (req, res) => {
+  const { cid, pid } = req.params;
+  const { quantity } = req.body;
+  const carts = loadJSONFile('carts.json');
+  const cartIndex = carts.findIndex((c) => c.id === cid);
+
+  if (cartIndex !== -1) {
+    const cart = carts[cartIndex];
+    const productIndex = cart.products.findIndex((p) => p.id === pid);
+
+    if (productIndex !== -1) {
+      // El producto ya existe en el carrito, incrementar la cantidad
+      cart.products[productIndex].quantity += quantity;
     } else {
-      res.status(404).json({ error: 'Producto no encontrado' });
+      // El producto no existe en el carrito, agregarlo
+      cart.products.push({ id: pid, quantity });
     }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Error al obtener el producto' });
+
+    saveJSONFile('carts.json', carts);
+    res.json({ message: 'Producto agregado al carrito', cart: cart.products });
+  } else {
+    res.status(404).json({ error: 'Carrito no encontrado' });
   }
 });
 
-// Inicio el servidor
+// Iniciar el servidor
 app.listen(port, () => {
-  console.log(`Servidor Express en funcionamiento en el puerto ${port}`);
+  console.log(`Servidor en funcionamiento en el puerto ${port}`);
 });
