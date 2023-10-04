@@ -4,15 +4,8 @@ const fs = require('fs');
 const app = express();
 const port = 8080;
 
-// Configuración de Handlebars
-app.engine('handlebars', exphbs.engine({
-  layoutsDir: 'views/',
-  defaultLayout: null,
-  extname: 'handlebars',
-}));
-
-app.set('view engine', 'handlebars');
-app.set('views', 'views');
+// Middleware para parsear JSON en las solicitudes
+app.use(express.json());
 
 // Ruta raíz para productos
 const productsRouter = express.Router();
